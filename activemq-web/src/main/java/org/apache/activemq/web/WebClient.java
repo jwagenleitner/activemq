@@ -105,7 +105,9 @@ public class WebClient implements HttpSessionActivationListener, HttpSessionBind
             client = WebClient.createWebClient(request);
             session.setAttribute(WEB_CLIENT_ATTRIBUTE, client);
         }
-
+        if (!client.canAccessFrom(request)) {
+            throw new NotAuthorizedException("WebClient is not accessible from request.");
+        }
         return client;
     }
 
@@ -367,20 +369,57 @@ public class WebClient implements HttpSessionActivationListener, HttpSessionBind
 
     protected static WebClient createWebClient(HttpServletRequest request) {
         WebClient client = new WebClient();
-        String auth = request.getHeader("Authorization");
-        if (auth != null) {
-            String[] tokens = auth.split(" ");
-            if (tokens.length == 2) {
-                String encoded = tokens[1].trim();
-                String credentials = new String(javax.xml.bind.DatatypeConverter.parseBase64Binary(encoded));
-                String[] creds = credentials.split(":");
-                if (creds.length == 2) {
-                    client.setUsername(creds[0]);
-                    client.setPassword(creds[1]);
-                }
-            }
-        }
+        BasicAuth auth = BasicAuth.from(request);
+        client.setUsername(auth.username);
+        client.setPassword(auth.password);
         return client;
     }
 
+    boolean canAccessFrom(HttpServletRequest request) {
+        if (username == null || password == null) {
+            return true;
+        }
+        BasicAuth auth = BasicAuth.from(request);
+        return username.equals(auth.username) && password.equals(auth.password);
+    }
+
+    private static class BasicAuth {
+        static final BasicAuth NO_AUTH = new BasicAuth(null, null);
+        final String username;
+        final String password;
+
+        static BasicAuth from(HttpServletRequest request) {
+            String auth = request.getHeader("Authorization");
+            BasicAuth result = NO_AUTH;
+            if (auth != null) {
+                String[] tokens = auth.split(" ");
+                if (tokens.length == 2) {
+                    String encoded = tokens[1].trim();
+                    String credentials = new String(javax.xml.bind.DatatypeConverter.parseBase64Binary(encoded));
+                    String[] creds = credentials.split(":");
+                    if (creds.length == 2) {
+                        result = new BasicAuth(creds[0], creds[1]);
+                    }
+                }
+            }
+            return result;
+        }
+
+        BasicAuth(String username, String password) {
+            this.username = username;
+            this.password = password;
+        }
+    }
+
+    static class NotAuthorizedException extends RuntimeException {
+
+        public NotAuthorizedException(String message) {
+            super(message);
+        }
+
+        public NotAuthorizedException(String message, Throwable cause) {
+            super(message, cause);
+        }
+
+    }
 }

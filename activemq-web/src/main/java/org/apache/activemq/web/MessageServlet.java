@@ -151,6 +151,8 @@ public class MessageServlet extends MessageServletSupport {
 
         } catch (JMSException e) {
             throw new ServletException("Could not post JMS message: " + e, e);
+        } catch (WebClient.NotAuthorizedException se) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         }
     }
 
@@ -246,6 +248,8 @@ public class MessageServlet extends MessageServletSupport {
             }
         } catch (JMSException e) {
             throw new ServletException("Could not post JMS message: " + e, e);
+        } catch (WebClient.NotAuthorizedException se) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         }
     }
 
@@ -366,7 +370,7 @@ public class MessageServlet extends MessageServletSupport {
                 WebClient client = clients.get(clientId);
                 if (client == null) {
                     LOG.debug("Creating new client [" + clientId + "]");
-                    client = new WebClient();
+                    client = WebClient.getWebClient(request);
                     clients.put(clientId, client);
                 }
                 return client;
