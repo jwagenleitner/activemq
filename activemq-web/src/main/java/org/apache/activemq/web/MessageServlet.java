@@ -73,6 +73,7 @@ public class MessageServlet extends MessageServletSupport {
     private long maximumReadTimeout = 20000;
     private long requestTimeout = 1000;
     private String defaultContentType = "application/xml";
+    private boolean defaultOneShot;
 
     private final HashMap<String, WebClient> clients = new HashMap<String, WebClient>();
     private final HashSet<MessageAvailableConsumer> activeConsumers = new HashSet<MessageAvailableConsumer>();
@@ -96,6 +97,15 @@ public class MessageServlet extends MessageServletSupport {
         if (name != null) {
             defaultContentType = name;
         }
+        name = servletConfig.getInitParameter("defaultOneShot");
+        if (name != null) {
+            defaultOneShot = asBoolean(name);
+        }
+        LOG.info("defaultReadTimeout=" + defaultReadTimeout);
+        LOG.info("maximumReadTimeout=" + maximumReadTimeout);
+        LOG.info("requestTimeout=" + requestTimeout);
+        LOG.info("defaultContentType=" + defaultContentType);
+        LOG.info("defaultOneShot=" + defaultOneShot);
     }
 
     /**
@@ -152,6 +162,7 @@ public class MessageServlet extends MessageServletSupport {
         } catch (JMSException e) {
             throw new ServletException("Could not post JMS message: " + e, e);
         } catch (WebClient.NotAuthorizedException se) {
+            LOG.error("Request not authorized to access WebClient", se);
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         }
     }
@@ -249,6 +260,7 @@ public class MessageServlet extends MessageServletSupport {
         } catch (JMSException e) {
             throw new ServletException("Could not post JMS message: " + e, e);
         } catch (WebClient.NotAuthorizedException se) {
+            LOG.error("Request not authorized to access WebClient", se);
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         }
     }
@@ -372,6 +384,13 @@ public class MessageServlet extends MessageServletSupport {
                     LOG.debug("Creating new client [" + clientId + "]");
                     client = WebClient.getWebClient(request);
                     clients.put(clientId, client);
+                } else {
+                    if (!client.canAccessFrom(request)) {
+                        throw new WebClient.NotAuthorizedException(
+                                "Request not authorized to access WebClient " +
+                                "using clientId [" + clientId + "]"
+                        );
+                    }
                 }
                 return client;
             }
@@ -433,7 +452,9 @@ public class MessageServlet extends MessageServletSupport {
      * Close the consumer if one-shot mode is used on the given request.
      */
     protected void closeConsumerOnOneShot(HttpServletRequest request, WebClient client, Destination dest) {
-        if (asBoolean(request.getParameter(oneShotParameter), false)) {
+        if (asBoolean(request.getParameter(oneShotParameter), false) ||
+                (defaultOneShot && request.getParameter("clientId") == null))
+        {
             try {
                 client.closeConsumer(dest);
             } catch (JMSException jms_exc) {

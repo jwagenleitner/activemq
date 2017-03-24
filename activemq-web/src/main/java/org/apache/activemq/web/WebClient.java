@@ -106,7 +106,10 @@ public class WebClient implements HttpSessionActivationListener, HttpSessionBind
             session.setAttribute(WEB_CLIENT_ATTRIBUTE, client);
         }
         if (!client.canAccessFrom(request)) {
-            throw new NotAuthorizedException("WebClient is not accessible from request.");
+            throw new WebClient.NotAuthorizedException(
+                    "Request not authorized to access WebClient " +
+                    "using clientId [" + request.getParameter("clientId") + "]"
+            );
         }
         return client;
     }
